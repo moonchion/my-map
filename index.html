@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>일본과 한국 건축 문화유산 지도 프로젝트</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        .mapboxgl-popup {
+    max-width: 1000px !important; 
+}
+        body { margin: 0; padding: 0; font-family: 'Malgun Gothic', sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .popup-content { 
+    padding: 8px; 
+    min-width: 440px; /* 기존 220px에서 2배로 확대 */
+    max-width: 1000px; /* 기존 300px에서 2배로 확대 */
+        }
+        .popup-title { font-weight: bold; font-size: 16px; margin-bottom: 8px; border-bottom: 2px solid #000000; padding-bottom: 5px; color: #000000; }
+        .popup-info { font-size: 13px; line-height: 1.6; color: #444; }
+        /* 상세 설명(detail) 스타일 추가 */
+        .popup-detail { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #ccc; font-size: 13px; color: #555; line-height: 1.5; white-space: pre-wrap; }
+        .popup-img { width: 100%; height: auto; margin-top: 10px; border-radius: 4px; border: 1px solid #ddd; }
+        .read-more { display: block; margin-top: 10px; padding: 8px; background: #d32f2f; color: #fff; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div id='map'></div>
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoibW9vbmNoaW9uIiwiYSI6ImNtamZrdzRxdjAzeGszZ3ExYmpwazc1cHEifQ.KxqUL8YA91UFWfm5bE-aYw';
+    
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTHCpldwp3jfFwaiLul0402QAJJ3Pg2-bBoAM83vKU0ug2EaTiVrOG84XxJSG-jdg3UnR6GQzZjF8vt/pub?gid=2096234162&single=true&output=csv";
+
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/moonchion/cmjfohixm003x01sg9o0l6tp6',
+        center: [137.0527, 36.7923],
+        zoom: 8
+    });
+
+    function csvToGeoJSON(csvData) {
+        const features = csvData.map(row => ({
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [parseFloat(row.경도), parseFloat(row.위도)]
+            },
+            'properties': { ...row }
+        }));
+        return { 'type': 'FeatureCollection', 'features': features };
+    }
+
+    map.on('load', () => {
+        map.loadImage('images/flag.png', (error, flagImg) => {
+            if (error) console.error("flag.png 로드 실패:", error);
+            if (flagImg) map.addImage('flag-icon', flagImg, { pixelRatio: 2 });
+
+            map.loadImage('images/star.png', (error, starImg) => {
+                if (error) console.error("star.png 로드 실패:", error);
+                if (starImg) map.addImage('star-icon', starImg, { pixelRatio: 2 });
+
+                Papa.parse(csvUrl, {
+                    download: true,
+                    header: true,
+                    complete: function(results) {
+                        const geojsonData = csvToGeoJSON(results.data);
+                        map.addSource('history-data', { 'type': 'geojson', 'data': geojsonData });
+
+                        const isSpecialRecord = ['in', ['get', 'record'], ['literal', ['여행한 장소', '여행할 장소']]];
+                        const isNotSpecial = ['!', isSpecialRecord];
+
+                        map.addLayer({
+                            'id': 'layer-flag',
+                            'type': 'symbol',
+                            'source': 'history-data',
+                            'layout': { 'icon-image': 'flag-icon', 'icon-size': 0.8, 'icon-allow-overlap': true },
+                            'filter': ['==', ['get', 'record'], '여행한 장소']
+                        });
+
+                        map.addLayer({
+                            'id': 'layer-star',
+                            'type': 'symbol',
+                            'source': 'history-data',
+                            'layout': { 'icon-image': 'star-icon', 'icon-size': 1, 'icon-allow-overlap': true },
+                            'filter': ['==', ['get', 'record'], '여행할 장소']
+                        });
+
+                        map.addLayer({
+                            'id': 'layer-always', 'type': 'circle', 'source': 'history-data',
+                            'paint': { 'circle-color': '#d32f2f', 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' },
+                            'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'always']]
+                        });
+
+                        map.addLayer({
+                            'id': 'layer-represent', 'type': 'circle', 'source': 'history-data',
+                            'maxzoom': 13,
+                            'paint': { 'circle-color': '#1976d2', 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' },
+                            'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'represent']]
+                        });
+
+                        map.addLayer({
+                            'id': 'layer-detail', 'type': 'circle', 'source': 'history-data',
+                            'minzoom': 13,
+                            'paint': { 'circle-color': '#fbc02d', 'circle-radius': 5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff' },
+                            'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'detail']]
+                        });
+
+                        const layerIds = ['layer-always', 'layer-represent', 'layer-detail', 'layer-flag', 'layer-star'];
+                        
+                        map.on('click', (e) => {
+                            const features = map.queryRenderedFeatures(e.point, { layers: layerIds });
+                            if (!features.length) return;
+
+                            const p = features[0].properties;
+                            
+                            // 팝업 HTML 생성
+                            let content = `<div class="popup-content">
+                                <div class="popup-title">${p.한국어이름}</div>
+                                <div class="popup-info">
+                                    <b>일본어:</b> ${p.일본어이름}<br>
+                                    ${p.시대 ? `<b>시대:</b> ${p.시대}<br>` : ''}
+                                    ${p.연도 ? `<b>연도:</b> ${p.연도}<br>` : ''}
+                                    ${p.등급 ? `<b>등급:</b> ${p.등급}<br>` : ''}
+                                    ${p.record === '여행한 장소' ? `<b>✅ 여행한 장소</b><br>` : ''}
+                                    ${p.record === '여행할 장소' ? `<b>⭐ 여행할 장소</b><br>` : ''}
+                                </div>`;
+
+                            // [수정 핵심] detail 열의 데이터가 있으면 추가
+                            if (p.detail) {
+                                content += `<div class="popup-detail">${p.detail}</div>`;
+                            }
+                            
+                            if(p.image_file) content += `<img src="images/${p.image_file}" class="popup-img">`;
+                            if(p.notion_url) content += `<a href="${p.notion_url}" target="_blank" class="read-more">상세 정보(Notion) 보기</a>`;
+                            content += `</div>`;
+
+                            new mapboxgl.Popup().setLngLat(features[0].geometry.coordinates).setHTML(content).addTo(map);
+                        });
+
+                        layerIds.forEach(id => {
+                            map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+                            map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+                        });
+                    }
+                });
+            });
+        });
+    });
+</script>
+</body>
+</html>
