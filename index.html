@@ -53,96 +53,111 @@
 
     map.on('load', () => {
         map.loadImage('images/flag.png', (error, flagImg) => {
-            if (error) console.error("flag.png 로드 실패:", error);
             if (flagImg) map.addImage('flag-icon', flagImg, { pixelRatio: 2 });
 
             map.loadImage('images/star.png', (error, starImg) => {
-                if (error) console.error("star.png 로드 실패:", error);
                 if (starImg) map.addImage('star-icon', starImg, { pixelRatio: 2 });
 
-                Papa.parse(csvUrl, {
-                    download: true,
-                    header: true,
-                    complete: function(results) {
-                        const geojsonData = csvToGeoJSON(results.data);
-                        map.addSource('history-data', { 'type': 'geojson', 'data': geojsonData });
+                // 1. ban.png 이미지 추가 로드
+                map.loadImage('images/ban.png', (error, banImg) => {
+                    if (error) console.error("ban.png 로드 실패:", error);
+                    if (banImg) map.addImage('ban-icon', banImg, { pixelRatio: 2 });
 
-                        const isSpecialRecord = ['in', ['get', 'record'], ['literal', ['여행한 장소', '여행할 장소']]];
-                        const isNotSpecial = ['!', isSpecialRecord];
+                    Papa.parse(csvUrl, {
+                        download: true,
+                        header: true,
+                        complete: function(results) {
+                            const geojsonData = csvToGeoJSON(results.data);
+                            map.addSource('history-data', { 'type': 'geojson', 'data': geojsonData });
 
-                        map.addLayer({
-                            'id': 'layer-flag',
-                            'type': 'symbol',
-                            'source': 'history-data',
-                            'layout': { 'icon-image': 'flag-icon', 'icon-size': 0.8, 'icon-allow-overlap': true },
-                            'filter': ['==', ['get', 'record'], '여행한 장소']
-                        });
+                            // 2. '끌리지 않는 장소'를 특수 레코드 필터에 추가
+                            const isSpecialRecord = ['in', ['get', 'record'], ['literal', ['여행한 장소', '여행할 장소', '끌리지 않는 장소']]];
+                            const isNotSpecial = ['!', isSpecialRecord];
 
-                        map.addLayer({
-                            'id': 'layer-star',
-                            'type': 'symbol',
-                            'source': 'history-data',
-                            'layout': { 'icon-image': 'star-icon', 'icon-size': 1, 'icon-allow-overlap': true },
-                            'filter': ['==', ['get', 'record'], '여행할 장소']
-                        });
+                            map.addLayer({
+                                'id': 'layer-flag',
+                                'type': 'symbol',
+                                'source': 'history-data',
+                                'layout': { 'icon-image': 'flag-icon', 'icon-size': 0.8, 'icon-allow-overlap': true },
+                                'filter': ['==', ['get', 'record'], '여행한 장소']
+                            });
 
-                        map.addLayer({
-                            'id': 'layer-always', 'type': 'circle', 'source': 'history-data',
-                            'paint': { 'circle-color': '#d32f2f', 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' },
-                            'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'always']]
-                        });
+                            map.addLayer({
+                                'id': 'layer-star',
+                                'type': 'symbol',
+                                'source': 'history-data',
+                                'layout': { 'icon-image': 'star-icon', 'icon-size': 1, 'icon-allow-overlap': true },
+                                'filter': ['==', ['get', 'record'], '여행할 장소']
+                            });
 
-                        map.addLayer({
-                            'id': 'layer-represent', 'type': 'circle', 'source': 'history-data',
-                            'maxzoom': 13,
-                            'paint': { 'circle-color': '#1976d2', 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' },
-                            'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'represent']]
-                        });
+                            // 3. '끌리지 않는 장소' 전용 레이어 추가
+                            map.addLayer({
+                                'id': 'layer-ban',
+                                'type': 'symbol',
+                                'source': 'history-data',
+                                'layout': { 'icon-image': 'ban-icon', 'icon-size': 0.6, 'icon-allow-overlap': true },
+                                'filter': ['==', ['get', 'record'], '끌리지 않는 장소']
+                            });
 
-                        map.addLayer({
-                            'id': 'layer-detail', 'type': 'circle', 'source': 'history-data',
-                            'minzoom': 13,
-                            'paint': { 'circle-color': '#fbc02d', 'circle-radius': 5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff' },
-                            'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'detail']]
-                        });
+                            map.addLayer({
+                                'id': 'layer-always', 'type': 'circle', 'source': 'history-data',
+                                'paint': { 'circle-color': '#d32f2f', 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' },
+                                'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'always']]
+                            });
 
-                        const layerIds = ['layer-always', 'layer-represent', 'layer-detail', 'layer-flag', 'layer-star'];
-                        
-                        map.on('click', (e) => {
-                            const features = map.queryRenderedFeatures(e.point, { layers: layerIds });
-                            if (!features.length) return;
+                            map.addLayer({
+                                'id': 'layer-represent', 'type': 'circle', 'source': 'history-data',
+                                'maxzoom': 13,
+                                'paint': { 'circle-color': '#1976d2', 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' },
+                                'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'represent']]
+                            });
 
-                            const p = features[0].properties;
+                            map.addLayer({
+                                'id': 'layer-detail', 'type': 'circle', 'source': 'history-data',
+                                'minzoom': 13,
+                                'paint': { 'circle-color': '#fbc02d', 'circle-radius': 5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff' },
+                                'filter': ['all', isNotSpecial, ['==', ['get', 'marker_type'], 'detail']]
+                            });
+
+                            // 4. 클릭 이벤트를 감지할 레이어 목록에 'layer-ban' 추가
+                            const layerIds = ['layer-always', 'layer-represent', 'layer-detail', 'layer-flag', 'layer-star', 'layer-ban'];
                             
-                            // 팝업 HTML 생성
-                            let content = `<div class="popup-content">
-                                <div class="popup-title">${p.한국어이름}</div>
-                                <div class="popup-info">
-                                    <b>일본어:</b> ${p.일본어이름}<br>
-                                    ${p.시대 ? `<b>시대:</b> ${p.시대}<br>` : ''}
-                                    ${p.연도 ? `<b>연도:</b> ${p.연도}<br>` : ''}
-                                    ${p.등급 ? `<b>등급:</b> ${p.등급}<br>` : ''}
-                                    ${p.record === '여행한 장소' ? `<b>✅ 여행한 장소</b><br>` : ''}
-                                    ${p.record === '여행할 장소' ? `<b>⭐ 여행할 장소</b><br>` : ''}
-                                </div>`;
+                            map.on('click', (e) => {
+                                const features = map.queryRenderedFeatures(e.point, { layers: layerIds });
+                                if (!features.length) return;
 
-                            // [수정 핵심] detail 열의 데이터가 있으면 추가
-                            if (p.detail) {
-                                content += `<div class="popup-detail">${p.detail}</div>`;
-                            }
-                            
-                            if(p.image_file) content += `<img src="images/${p.image_file}" class="popup-img">`;
-                            if(p.notion_url) content += `<a href="${p.notion_url}" target="_blank" class="read-more">상세 정보(Notion) 보기</a>`;
-                            content += `</div>`;
+                                const p = features[0].properties;
+                                
+                                let content = `<div class="popup-content">
+                                    <div class="popup-title">${p.한국어이름}</div>
+                                    <div class="popup-info">
+                                        <b>일본어:</b> ${p.일본어이름}<br>
+                                        ${p.시대 ? `<b>시대:</b> ${p.시대}<br>` : ''}
+                                        ${p.연도 ? `<b>연도:</b> ${p.연도}<br>` : ''}
+                                        ${p.등급 ? `<b>등급:</b> ${p.등급}<br>` : ''}
+                                        ${p.record === '여행한 장소' ? `<b>✅ 여행한 장소</b><br>` : ''}
+                                        ${p.record === '여행할 장소' ? `<b>⭐ 여행할 장소</b><br>` : ''}
+                                        ${/* 5. 팝업에 '끌리지 않는 장소' 문구 추가 */
+                                          p.record === '끌리지 않는 장소' ? `<b>🚫 끌리지 않는 장소</b><br>` : ''}
+                                    </div>`;
 
-                            new mapboxgl.Popup().setLngLat(features[0].geometry.coordinates).setHTML(content).addTo(map);
-                        });
+                                if (p.detail) {
+                                    content += `<div class="popup-detail">${p.detail}</div>`;
+                                }
+                                
+                                if(p.image_file) content += `<img src="images/${p.image_file}" class="popup-img">`;
+                                if(p.notion_url) content += `<a href="${p.notion_url}" target="_blank" class="read-more">상세 정보(Notion) 보기</a>`;
+                                content += `</div>`;
 
-                        layerIds.forEach(id => {
-                            map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
-                            map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
-                        });
-                    }
+                                new mapboxgl.Popup().setLngLat(features[0].geometry.coordinates).setHTML(content).addTo(map);
+                            });
+
+                            layerIds.forEach(id => {
+                                map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+                                map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+                            });
+                        }
+                    });
                 });
             });
         });
